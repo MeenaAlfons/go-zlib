@@ -26,6 +26,16 @@ int InflateInit2(z_streamp strm, int windowBits) {
 	return inflateInit2(strm, windowBits);
 }
 
+int DeflateSetDictionary(z_streamp strm, const Bytef *dictionary,
+						 uInt  dictLength) {
+	return deflateSetDictionary(strm, dictionary, dictLength);
+}
+
+int InflateSetDictionary(z_streamp strm, const Bytef *dictionary,
+						 uInt  dictLength) {
+	return inflateSetDictionary(strm, dictionary, dictLength);
+}
+
 int DeflateBound(z_streamp strm, int sourceLen) {
 	return deflateBound(strm, sourceLen);
 }
@@ -59,6 +69,9 @@ type ZStream interface {
 	InflateInit2(windowBits int) ZConstant
 	DeflateInit(level int) ZConstant
 	DeflateInit2(level, windowBits, memLevel, strategy int) ZConstant
+
+	DeflateSetDictionary(dictionary []byte) ZConstant
+	InflateSetDictionary(dictionary []byte) ZConstant
 
 	DeflateEnd() ZConstant
 	InflateEnd() ZConstant
@@ -152,6 +165,46 @@ func (z *zstream) DeflateInit2(level, windowBits, memLevel, strategy int) ZConst
 	defer pinner.Unpin()
 
 	return ZConstant(C.DeflateInit2(&z.strm, C.int(level), C.int(Z_DEFLATED), C.int(windowBits), C.int(memLevel), C.int(strategy)))
+}
+
+// DeflateSetDictionary initializes the compression dictionary.
+// For more details, see http://zlib.net/manual.html#Advanced
+func (z *zstream) DeflateSetDictionary(dictionary []byte) ZConstant {
+	// Copy the dictionary for two reasons:
+	// - Not depending on the caller to keep the dictionary alive
+	// - Providing one more byte at the end of the dictionary to avoid
+	//   the case where the stream ends at the end of the dictionary which
+	//   would result in an internal state that points past the end of the
+	//   dictionary and causes an error "found pointer to free object".
+	dict := make([]byte, len(dictionary)+1)
+	copy(dict, dictionary)
+	utils.Debug("DeflateSetDictionary %p dict: %p len(dict): %d, dictionary: %p, len(dictionary): %d (*C.Bytef)(&dict[0]): %p", z, dict, len(dict), dictionary, len(dictionary), (*C.Bytef)(&dict[0]))
+
+	pinner := runtime.Pinner{}
+	pinner.Pin(&z.strm)
+	defer pinner.Unpin()
+
+	return ZConstant(C.DeflateSetDictionary(&z.strm, (*C.Bytef)(&dict[0]), C.uInt(len(dictionary))))
+}
+
+// InflateSetDictionary initializes the decompression dictionary.
+// For more details, see http://zlib.net/manual.html#Advanced
+func (z *zstream) InflateSetDictionary(dictionary []byte) ZConstant {
+	// Copy the dictionary for two reasons:
+	// - Not depending on the caller to keep the dictionary alive
+	// - Providing one more byte at the end of the dictionary to avoid
+	//   the case where the stream ends at the end of the dictionary which
+	//   would result in an internal state that points past the end of the
+	//   dictionary and causes an error "found pointer to free object".
+	dict := make([]byte, len(dictionary)+1)
+	copy(dict, dictionary)
+	utils.Debug("InflateSetDictionary %p dict: %p len(dict): %d, dictionary: %p, len(dictionary): %d (*C.Bytef)(&dict[0]): %p", z, dict, len(dict), dictionary, len(dictionary), (*C.Bytef)(&dict[0]))
+
+	pinner := runtime.Pinner{}
+	pinner.Pin(&z.strm)
+	defer pinner.Unpin()
+
+	return ZConstant(C.InflateSetDictionary(&z.strm, (*C.Bytef)(&dict[0]), C.uInt(len(dictionary))))
 }
 
 // DeflateBound returns an upper bound on the compressed size after deflation of sourceLen bytes.

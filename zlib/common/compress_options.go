@@ -38,6 +38,7 @@ type CompressOptions interface {
 	MemoryLevel() int
 	Strategy() StrategyType
 	BufferSize() int
+	InitialDictionary() []byte
 
 	WithLevel(level int) CompressOptions
 	WithWindowBits(windowBits int) CompressOptions
@@ -45,14 +46,16 @@ type CompressOptions interface {
 	WithMemoryLevel(memoryLevel int) CompressOptions
 	WithStrategy(strategy StrategyType) CompressOptions
 	WithBufferSize(bufferSize int) CompressOptions
+	WithInitialDictionary(initialDictionary []byte) CompressOptions
 }
 
 type compressOptions struct {
-	level       int
-	windowBits  int
-	header      HeaderType
-	memoryLevel int
-	strategy    StrategyType
+	level             int
+	windowBits        int
+	header            HeaderType
+	memoryLevel       int
+	strategy          StrategyType
+	initialDictionary []byte
 
 	bufferSize int
 }
@@ -79,6 +82,10 @@ func (opts *compressOptions) Strategy() StrategyType {
 
 func (opts *compressOptions) BufferSize() int {
 	return opts.bufferSize
+}
+
+func (opts *compressOptions) InitialDictionary() []byte {
+	return opts.initialDictionary
 }
 
 func (opts *compressOptions) WithLevel(level int) CompressOptions {
@@ -108,5 +115,10 @@ func (opts *compressOptions) WithStrategy(strategy StrategyType) CompressOptions
 
 func (opts *compressOptions) WithBufferSize(bufferSize int) CompressOptions {
 	opts.bufferSize = bufferSize
+	return opts
+}
+
+func (opts *compressOptions) WithInitialDictionary(initialDictionary []byte) CompressOptions {
+	opts.initialDictionary = initialDictionary
 	return opts
 }

@@ -2,11 +2,10 @@
 
 **Next Version**
 
+- [x] Support SetDictionary to initialize the decompression dictionary
 - Support Reset for reuse of already allocated resources
-- Support SetDictionary to initialize the decompression dictionary
 - Benchmarks
 - Test on multiple OSs and include the correct linking flags or library names
-- Test on older version of Go to determine "The minimum version of Go required by the current module."
 - Cgo must always be guarded with build tags
 
 **Nice to have**
@@ -14,6 +13,7 @@
 - A flag to run smaller set of tests
 - Implement Stringer interface to help with debugability
 - Expand compliance with more linters in golangci-lint
+- Try to support older versions of Go that doesn't have runtime.Pinner.
 
 **Open source project improvements**
 

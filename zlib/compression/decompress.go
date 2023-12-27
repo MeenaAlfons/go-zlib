@@ -20,11 +20,26 @@ func NewDecompressor(opts common.DecompressOptions) (FeederConsumer, error) {
 		return nil, capi.ZError(ret)
 	}
 
+	switch opts.Header() {
+	case common.HeaderTypeZlib:
+		// Save the initial dictionary to be used later after the first inflate call returns Z_NEED_DICT.
+		c.initialDictionary = opts.InitialDictionary()
+	case common.HeaderTypeRaw:
+		if opts.InitialDictionary() != nil {
+			ret = c.zstream.InflateSetDictionary(opts.InitialDictionary())
+			if ret != capi.Z_OK {
+				return nil, capi.ZError(ret)
+			}
+		}
+
+	}
+
 	return newFeederConsumerSafeOutputBuffer(c), nil
 }
 
 type decompressor struct {
-	zstream capi.ZStream
+	zstream           capi.ZStream
+	initialDictionary []byte
 
 	lastFlush     Flush
 	hasMoreOutput bool
@@ -131,9 +146,25 @@ func (c *decompressor) processReturnValue(ret capi.ZConstant) error {
 	//                which may happen if the stream was not initialized
 	//                Or the appplication is broken and altered the memory of the stream state.
 	switch ret {
-	case capi.Z_DATA_ERROR, capi.Z_NEED_DICT, capi.Z_MEM_ERROR, capi.Z_STREAM_ERROR:
+	case capi.Z_DATA_ERROR, capi.Z_MEM_ERROR, capi.Z_STREAM_ERROR:
 		reason := fmt.Errorf("zlib: inflate failed with err: %w", capi.ZError(ret))
 		return c.endStream(reason)
+	case capi.Z_NEED_DICT:
+		if c.initialDictionary == nil {
+			reason := fmt.Errorf("zlib: inflate failed with err: %w", capi.ZError(ret))
+			return c.endStream(reason)
+		}
+		ret2 := c.zstream.InflateSetDictionary(c.initialDictionary)
+		if ret2 != capi.Z_OK {
+			reason := fmt.Errorf("zlib: inflate failed with err: %w, and InflateSetDictionary failed with err: %w", capi.ZError(ret), capi.ZError(ret2))
+			return c.endStream(reason)
+		}
+		// Clear the initial dictionary so that it is not used again.
+		// This will help us catch the case where Z_NEED_DICT is returned again instead of mistakenly providing the same dictionary.
+		c.initialDictionary = nil
+		// Set hasMoreOutput to true so that Consume is called instead of Feed.
+		c.hasMoreOutput = true
+		return nil
 	}
 
 	if !c.hasMoreOutput {

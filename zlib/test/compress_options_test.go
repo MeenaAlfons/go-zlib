@@ -4,7 +4,7 @@ import (
 	"github.com/MeenaAlfons/go-zlib/zlib/common"
 )
 
-func getCombinations() []common.CompressOptions {
+func getCompressOptionsCombinations() []common.CompressOptions {
 	windowBits := []int{
 		// 8 is intentionally omitted because it is not `well` supported by the zlib library
 		9,

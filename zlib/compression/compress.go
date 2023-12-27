@@ -20,6 +20,13 @@ func NewCompressor(opts common.CompressOptions) (FeederConsumer, error) {
 		return nil, capi.ZError(ret)
 	}
 
+	if opts.InitialDictionary() != nil {
+		ret = c.zstream.DeflateSetDictionary(opts.InitialDictionary())
+		if ret != capi.Z_OK {
+			return nil, capi.ZError(ret)
+		}
+	}
+
 	return newFeederConsumerSafeOutputBuffer(c), nil
 }
 

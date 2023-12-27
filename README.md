@@ -8,6 +8,7 @@ Easy to use `Writer` and `Reader` interfaces in addition to direct and memory-sa
 
 ## Why another zlib library in Go?
 
+At the time of writing (Dec 2023), these are the montivations to write this library:
 
 - **Hidden configurations:** The standard libraries [zlib](https://pkg.go.dev/compress/zlib) and [deflate](https://pkg.go.dev/compress/deflate) hide most of the configurations of the underlying compression algorithm. A library like [4kills/go-zlib](github.com/4kills/go-zlib) exposes some of those configurations like `compression strategies` and `compression levels` but still hides other parameters like `WindowBits` and `MemoryLevel`. This library exposes all these configurations in addition to giving more control on memory consumption via the `BufferSize` parameter.
 - **Limited IO interfaces:** The prevously mentioned libraries implement `Writer` interface for compression and `Reader` interface for decompression. However, there are cases where a compression reader or a decompression writer are needed. This library supports both interfaces for both compression and decompression.
