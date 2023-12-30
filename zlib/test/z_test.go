@@ -51,7 +51,7 @@ const REPEAT_COUNT = 1
 func TestZlib(t *testing.T) {
 	tests := []struct {
 		name                  string
-		operation             func(testLogger, sample, common.CompressOptions, func(common.CompressOptions) common.DecompressOptions) error
+		operation             func([]byte, common.CompressOptions, func(common.CompressOptions) common.DecompressOptions, testLogger) error
 		decompressOptsFactory func(opts common.CompressOptions) common.DecompressOptions
 		expectedError         error
 	}{
@@ -75,28 +75,17 @@ func TestZlib(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			for _, sample := range samples {
-				for _, compressOpts := range combinations {
-					for _, dictionaryFactory := range dictionaryFactories {
-						opts := copyCompressOptions(compressOpts)
-						opts = opts.WithInitialDictionary(dictionaryFactory(sample.decompressed, compressOpts))
-
-						// Tests are repeated to test the effect of memory management and the garbage collector.
-						repeat(REPEAT_COUNT, func(index int) {
-							name := fmt.Sprintf("%s l:%d w:%d h:%d s:%d dict:%d index:%d", sample.name, opts.Level(), opts.WindowBits(), opts.Header(), opts.Strategy(), len(opts.InitialDictionary()), index)
-							t.Run(name, func(t *testing.T) {
-								t.Log("Testing", name)
-								t.Logf("Original data: %x", sample.decompressed)
-
-								err := test.operation(t, sample, opts, test.decompressOptsFactory)
-								if err != test.expectedError {
-									t.Fatalf("Expected error: %v\nActual error: %v", test.expectedError, err)
-								}
-							})
-						})
-					}
-				}
-			}
+			RunTestOnCombinations(
+				t,
+				samples,
+				combinations,
+				dictionaryFactories,
+				REPEAT_COUNT,
+				AllCombinationsPredicate,
+				test.decompressOptsFactory,
+				test.operation,
+				test.expectedError,
+			)
 		})
 	}
 }
@@ -109,10 +98,10 @@ func WithDictionary(operation func(*testing.T, sample, common.CompressOptions, f
 	}
 }
 
-func DecompressorWriterCompressReader(log testLogger, sample sample, opts common.CompressOptions, decompressOptsFactory func(common.CompressOptions) common.DecompressOptions) error {
+func DecompressorWriterCompressReader(sampleData []byte, opts common.CompressOptions, decompressOptsFactory func(common.CompressOptions) common.DecompressOptions, log testLogger) error {
 	decompressOpts := decompressOptsFactory(opts)
 
-	compressed, err := synchronousCompressReader(log, sample.decompressed, opts)
+	compressed, err := synchronousCompressReader(log, sampleData, opts)
 	if err != nil {
 		return err
 	}
@@ -134,21 +123,21 @@ func DecompressorWriterCompressReader(log testLogger, sample sample, opts common
 	}
 	log.Logf("Decompressed data 2: %x", compressed2)
 
-	if !bytes.Equal(decompressed, sample.decompressed) {
-		return fmt.Errorf("decompressed != original data\n decompressed: %x\n original: %x", decompressed, sample.decompressed)
+	if !bytes.Equal(decompressed, sampleData) {
+		return fmt.Errorf("decompressed != original data\n decompressed: %x\n original: %x", decompressed, sampleData)
 	}
 
-	if !bytes.Equal(decompressed2, sample.decompressed) {
-		return fmt.Errorf("decompressed2 != original data\n decompressed: %x\n original: %x", decompressed, sample.decompressed)
+	if !bytes.Equal(decompressed2, sampleData) {
+		return fmt.Errorf("decompressed2 != original data\n decompressed: %x\n original: %x", decompressed, sampleData)
 	}
 
 	return nil
 }
 
-func CompressorWriterDecompressReader(log testLogger, sample sample, opts common.CompressOptions, decompressOptsFactory func(common.CompressOptions) common.DecompressOptions) error {
+func CompressorWriterDecompressReader(sampleData []byte, opts common.CompressOptions, decompressOptsFactory func(common.CompressOptions) common.DecompressOptions, log testLogger) error {
 	decompressOpts := decompressOptsFactory(opts)
 
-	compressed, decompressed, err := asynchronousCompressAndDecompress(log, sample.decompressed, opts, decompressOpts)
+	compressed, decompressed, err := asynchronousCompressAndDecompress(log, sampleData, opts, decompressOpts)
 	if err != nil {
 		return err
 	}
@@ -171,12 +160,12 @@ func CompressorWriterDecompressReader(log testLogger, sample sample, opts common
 	}
 	log.Logf("Decompressed data 2: %x", compressed2)
 
-	if !bytes.Equal(decompressed, sample.decompressed) {
-		return fmt.Errorf("decompressed != original data\n decompressed: %x\n original: %x", decompressed, sample.decompressed)
+	if !bytes.Equal(decompressed, sampleData) {
+		return fmt.Errorf("decompressed != original data\n decompressed: %x\n original: %x", decompressed, sampleData)
 	}
 
-	if !bytes.Equal(decompressed2, sample.decompressed) {
-		return fmt.Errorf("decompressed2 != original data\n decompressed: %x\n original: %x", decompressed, sample.decompressed)
+	if !bytes.Equal(decompressed2, sampleData) {
+		return fmt.Errorf("decompressed2 != original data\n decompressed: %x\n original: %x", decompressed, sampleData)
 	}
 
 	return nil
