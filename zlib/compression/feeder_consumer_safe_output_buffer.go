@@ -26,7 +26,7 @@ func (c *feederConsumerSafeOutputBuffer) Feed(input []byte, flush Flush, outputB
 		return c.feederConsumer.Feed(input, flush, outputBuffer[:len(outputBuffer)-1])
 	}
 
-	newOutputBuffer := make([]byte, 2)
+	newOutputBuffer := []byte{0, 0}
 	have, err := c.feederConsumer.Feed(input, flush, newOutputBuffer[:len(newOutputBuffer)-1])
 	copy(outputBuffer, newOutputBuffer)
 	return have, err
@@ -37,8 +37,7 @@ func (c *feederConsumerSafeOutputBuffer) Consume(outputBuffer []byte) (int, erro
 		return c.feederConsumer.Consume(outputBuffer[:len(outputBuffer)-1])
 	}
 
-	// TODO optimization: we can use a buffer on the stack here to avoid allocation on heap.
-	newOutputBuffer := make([]byte, 2)
+	newOutputBuffer := []byte{0, 0}
 	have, err := c.feederConsumer.Consume(newOutputBuffer[:len(newOutputBuffer)-1])
 	copy(outputBuffer, newOutputBuffer)
 	return have, err
