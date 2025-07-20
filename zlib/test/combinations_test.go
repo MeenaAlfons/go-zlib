@@ -12,32 +12,35 @@ func RunTestOnCombinations(
 	samples []sample,
 	compressOptsList []common.CompressOptions,
 	dictionaryFactories []DictionaryFactory,
+	zlibs []ZLib,
 	repeatCount int,
 	combinationPredicate CombinationPredicate,
 	decompressOptsFactory func(common.CompressOptions) common.DecompressOptions,
-	operation func([]byte, common.CompressOptions, func(common.CompressOptions) common.DecompressOptions, testLogger) error,
+	operation func(ZLib, []byte, common.CompressOptions, func(common.CompressOptions) common.DecompressOptions, testLogger) error,
 	expectedError error,
 ) {
 
 	for _, sample := range samples {
 		for _, compressOpts := range compressOptsList {
-			for _, dictionaryFactory := range dictionaryFactories {
-				dictionary := dictionaryFactory(sample.decompressed, compressOpts)
-				if !combinationPredicate(compressOpts, sample.decompressed, dictionary) {
-					continue
-				}
-				opts := copyCompressOptions(compressOpts)
-				opts = opts.WithInitialDictionary(dictionary)
+			for dictionaryFactoryIndex, dictionaryFactory := range dictionaryFactories {
+				for zlibIndex, zlib := range zlibs {
+					dictionary := dictionaryFactory(sample.decompressed, compressOpts)
+					if !combinationPredicate(compressOpts, sample.decompressed, dictionary) {
+						continue
+					}
+					opts := copyCompressOptions(compressOpts)
+					opts = opts.WithInitialDictionary(dictionary)
 
-				repeat(repeatCount, func(index int) {
-					name := fmt.Sprintf("%s l:%d w:%d h:%d s:%d dict:%d index:%d", sample.name, opts.Level(), opts.WindowBits(), opts.Header(), opts.Strategy(), len(opts.InitialDictionary()), index)
-					t.Run(name, func(t *testing.T) {
-						err := operation(sample.decompressed, opts, decompressOptsFactory, t)
-						if err != expectedError {
-							t.Fatalf("Expected error: %v\nActual error: %v", expectedError, err)
-						}
+					repeat(repeatCount, func(index int) {
+						name := fmt.Sprintf("%s l:%d w:%d h:%d s:%d dict:%d zlib:%d dictFactory:%d index:%d ", sample.name, opts.Level(), opts.WindowBits(), opts.Header(), opts.Strategy(), len(opts.InitialDictionary()), zlibIndex, dictionaryFactoryIndex, index)
+						t.Run(name, func(t *testing.T) {
+							err := operation(zlib, sample.decompressed, opts, decompressOptsFactory, t)
+							if err != expectedError {
+								t.Fatalf("Expected error: %v\nActual error: %v", expectedError, err)
+							}
+						})
 					})
-				})
+				}
 			}
 		}
 	}

@@ -30,4 +30,12 @@ type FeederConsumer interface {
 	// IsDoneWithReason returns true if the stream has ended.
 	// If the stream has ended because of an error, it returns the error.
 	IsDoneWithReason() (bool, error)
+
+	// Reset resets the internal state of the FeederConsumer.
+	// It allows reusing the same FeederConsumer instance with a new writer.
+	Reset() error
+
+	// Destroy releases the resources used by the FeederConsumer.
+	// After calling Destroy, the FeederConsumer cannot be used anymore until it is reset.
+	Destroy() error
 }

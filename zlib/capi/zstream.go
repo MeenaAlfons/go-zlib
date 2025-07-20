@@ -55,6 +55,14 @@ int DeflateEnd(z_streamp strm) {
 int InflateEnd(z_streamp strm) {
 	return inflateEnd(strm);
 }
+
+int DeflateReset(z_streamp strm) {
+	return deflateReset(strm);
+}
+
+int InflateReset(z_streamp strm) {
+	return inflateReset(strm);
+}
 */
 import "C"
 
@@ -87,6 +95,9 @@ type ZStream interface {
 	AvailIn() int
 
 	DeflateBound(sourceLength int) int
+
+	InflateReset() ZConstant
+	DeflateReset() ZConstant
 }
 
 // NewZStream creates a new ZStream representing a C z_stream
@@ -358,4 +369,26 @@ func (z *zstream) pin() runtime.Pinner {
 		pinner.Pin(&z.out)
 	}
 	return pinner
+}
+
+// InflateReset resets the internal state of the zstream for decompression.
+func (z *zstream) InflateReset() ZConstant {
+	pinner := z.pin()
+	defer func() {
+		pinner.Unpin()
+		utils.Debug("InflateReset Unpinned")
+	}()
+
+	return ZConstant(C.InflateReset(&z.strm))
+}
+
+// DeflateReset resets the internal state of the zstream for compression.
+func (z *zstream) DeflateReset() ZConstant {
+	pinner := z.pin()
+	defer func() {
+		pinner.Unpin()
+		utils.Debug("DeflateReset Unpinned")
+	}()
+
+	return ZConstant(C.DeflateReset(&z.strm))
 }

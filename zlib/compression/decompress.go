@@ -12,6 +12,7 @@ import (
 // NewDecompressor creates a new decompressor FeederConsumer with the given options.
 func NewDecompressor(opts common.DecompressOptions) (FeederConsumer, error) {
 	c := &decompressor{
+		opts:    opts,
 		zstream: capi.NewZStream(),
 	}
 
@@ -20,26 +21,19 @@ func NewDecompressor(opts common.DecompressOptions) (FeederConsumer, error) {
 		return nil, capi.ZError(ret)
 	}
 
-	switch opts.Header() {
-	case common.HeaderTypeZlib:
-		// Save the initial dictionary to be used later after the first inflate call returns Z_NEED_DICT.
-		c.initialDictionary = opts.InitialDictionary()
-	case common.HeaderTypeRaw:
-		if opts.InitialDictionary() != nil {
-			ret = c.zstream.InflateSetDictionary(opts.InitialDictionary())
-			if ret != capi.Z_OK {
-				return nil, capi.ZError(ret)
-			}
-		}
-
+	err := c.initDictionaryIfNeeded()
+	if err != nil {
+		return nil, err
 	}
 
 	return newFeederConsumerSafeOutputBuffer(c), nil
 }
 
 type decompressor struct {
-	zstream           capi.ZStream
-	initialDictionary []byte
+	opts common.DecompressOptions
+
+	zstream                      capi.ZStream
+	initialDictionaryHasBeenUsed bool
 
 	lastFlush     Flush
 	hasMoreOutput bool
@@ -150,18 +144,18 @@ func (c *decompressor) processReturnValue(ret capi.ZConstant) error {
 		reason := fmt.Errorf("zlib: inflate failed with err: %w", capi.ZError(ret))
 		return c.endStream(reason)
 	case capi.Z_NEED_DICT:
-		if c.initialDictionary == nil {
-			reason := fmt.Errorf("zlib: inflate failed with err: %w", capi.ZError(ret))
+		if c.initialDictionaryHasBeenUsed {
+			reason := fmt.Errorf("initial dictionary has been used before. zlib: inflate failed with err: %w", capi.ZError(ret))
 			return c.endStream(reason)
 		}
-		ret2 := c.zstream.InflateSetDictionary(c.initialDictionary)
+		ret2 := c.zstream.InflateSetDictionary(c.opts.InitialDictionary())
 		if ret2 != capi.Z_OK {
 			reason := fmt.Errorf("zlib: inflate failed with err: %w, and InflateSetDictionary failed with err: %w", capi.ZError(ret), capi.ZError(ret2))
 			return c.endStream(reason)
 		}
 		// Clear the initial dictionary so that it is not used again.
 		// This will help us catch the case where Z_NEED_DICT is returned again instead of mistakenly providing the same dictionary.
-		c.initialDictionary = nil
+		c.initialDictionaryHasBeenUsed = true
 		// Set hasMoreOutput to true so that Consume is called instead of Feed.
 		c.hasMoreOutput = true
 		return nil
@@ -191,9 +185,16 @@ func (c *decompressor) processReturnValue(ret capi.ZConstant) error {
 
 		// The input is fully consumed.
 		if ret == capi.Z_STREAM_END {
-			err := c.endStream(nil)
-			if err != nil {
-				return err
+			// We could voluntarily call endStream here to release the resources.
+			// However, we don't do that because the caller may want to reuse the decompressor.
+			// If the caller wants to reuse the decompressor, it should call Reset.
+			// If the caller wants to release the resource, it could Destroy().
+			// We also support the AutoDestroy option which will automatically call Destroy when the compressor is no longer needed.
+			if c.opts.AutoDestroy() {
+				err := c.Destroy()
+				if err != nil {
+					return fmt.Errorf("zlib: failed to auto destroy compressor: %w", err)
+				}
 			}
 			return io.EOF
 		}
@@ -239,11 +240,74 @@ func (c *decompressor) endStream(reason error) error {
 	return c.streamEndError
 }
 
+func (c *decompressor) Destroy() error {
+	if c.streamEndHasBeenCalled {
+		// If the stream has already ended, we don't need to call endStream again.
+		return nil
+	}
+
+	err := c.endStream(nil)
+	if err != nil {
+		return fmt.Errorf("zlib: failed to destroy decompressor: %w", err)
+	}
+	return nil
+}
+
+func (c *decompressor) Reset() error {
+	// If the stream was ended, reinitialize it, otherwise reset it.
+	switch c.streamEndHasBeenCalled {
+	case true:
+		ret := c.zstream.InflateInit2(zWindowBits(c.opts))
+		if ret != capi.Z_OK {
+			return capi.ZError(ret)
+		}
+	case false:
+		ret := c.zstream.InflateReset()
+		if ret != capi.Z_OK {
+			return fmt.Errorf("zlib: failed to reset the decompressor: %w", capi.ZError(ret))
+		}
+	}
+
+	c.lastFlush = NoFlush
+	c.hasMoreOutput = false
+	c.streamEndHasBeenCalled = false
+	c.streamEndReason = nil
+	c.streamEndError = nil
+	c.initialDictionaryHasBeenUsed = false
+
+	err := c.initDictionaryIfNeeded()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *decompressor) initDictionaryIfNeeded() error {
+	switch c.opts.Header() {
+	case common.HeaderTypeZlib:
+		// The initial dictionary will be used later after the first inflate call returns Z_NEED_DICT.
+
+	case common.HeaderTypeRaw:
+		if c.opts.InitialDictionary() != nil {
+			ret := c.zstream.InflateSetDictionary(c.opts.InitialDictionary())
+			if ret != capi.Z_OK {
+				return capi.ZError(ret)
+			}
+		}
+	}
+	return nil
+}
+
+func (c *decompressor) ResetWithOptions(opt common.DecompressOptions) error {
+	return fmt.Errorf("Reset with options is not YET supported for decompressor: %v", c.opts)
+}
+
 // TODO
 // func (c *ZDecompressor2) Reset() err {
 
-// 	ret := c.zstream.DeflateInit2(opts.Level, opts.ZWindowBits(), opts.MemoryLevel, int(opts.Strategy))
-// 	if ret != Z_OK {
-// 		return nil, ZError(ret)
-// 	}
-// }
+//		ret := c.zstream.DeflateInit2(opts.Level, opts.ZWindowBits(), opts.MemoryLevel, int(opts.Strategy))
+//		if ret != Z_OK {
+//			return nil, ZError(ret)
+//		}
+//	}

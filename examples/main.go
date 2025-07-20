@@ -19,6 +19,8 @@ func main() {
 
 	decompressed5 := asynchronousCompressAndDecompress(data)
 
+	decompressed6 := syncCompressDecompressWriterReset(data)
+
 	log.Printf(`
 		data: %v
 
@@ -32,6 +34,7 @@ func main() {
 		decompressed3: %v
 		decompressed4: %v
 		decompressed5: %v
+		decompressed6: %v
 		`,
 		data,
 		compressed,
@@ -43,5 +46,6 @@ func main() {
 		decompressed3,
 		decompressed4,
 		decompressed5,
+		decompressed6,
 	)
 }

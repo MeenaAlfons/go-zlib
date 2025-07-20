@@ -7,7 +7,6 @@ import (
 	"io"
 	"testing"
 
-	"github.com/MeenaAlfons/go-zlib/zlib"
 	"github.com/MeenaAlfons/go-zlib/zlib/common"
 )
 
@@ -16,7 +15,7 @@ import (
 func TestAgainstFlate(t *testing.T) {
 	tests := []struct {
 		name                  string
-		operation             func([]byte, common.CompressOptions, func(common.CompressOptions) common.DecompressOptions, testLogger) error
+		operation             func(ZLib, []byte, common.CompressOptions, func(common.CompressOptions) common.DecompressOptions, testLogger) error
 		combinationPredicate  CombinationPredicate
 		decompressOptsFactory func(common.CompressOptions) common.DecompressOptions
 		expectedError         error
@@ -45,6 +44,7 @@ func TestAgainstFlate(t *testing.T) {
 	samples := getDataSamples()
 	combinations := getCompressOptionsCombinations()
 	dictionaryFactories := getDictionaryFactories()
+	zlibs := getZlibs()
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			RunTestOnCombinations(
@@ -52,6 +52,7 @@ func TestAgainstFlate(t *testing.T) {
 				samples,
 				combinations,
 				dictionaryFactories,
+				zlibs,
 				REPEAT_COUNT,
 				test.combinationPredicate,
 				test.decompressOptsFactory,
@@ -83,7 +84,7 @@ func FlateInternalWindowBits15Predicate(opts common.CompressOptions, sample []by
 	// A better data set can be generated to test the difference between those cases expecting a failure and those cases expecting a success.
 }
 
-func CompressReaderFlateReader(sampleData []byte, opts common.CompressOptions, decompressOptsFactory func(common.CompressOptions) common.DecompressOptions, log testLogger) error {
+func CompressReaderFlateReader(zlib ZLib, sampleData []byte, opts common.CompressOptions, decompressOptsFactory func(common.CompressOptions) common.DecompressOptions, log testLogger) error {
 	var buf bytes.Buffer
 	buf.Write(sampleData)
 
@@ -106,7 +107,7 @@ func CompressReaderFlateReader(sampleData []byte, opts common.CompressOptions, d
 	return nil
 }
 
-func FlateWriterDecompressWriter(sampleData []byte, opts common.CompressOptions, decompressOptsFactory func(common.CompressOptions) common.DecompressOptions, log testLogger) error {
+func FlateWriterDecompressWriter(zlib ZLib, sampleData []byte, opts common.CompressOptions, decompressOptsFactory func(common.CompressOptions) common.DecompressOptions, log testLogger) error {
 	decompressOpts := decompressOptsFactory(opts)
 	var buf bytes.Buffer
 	decompressWriter, err := zlib.NewDecompressWriter(&buf, decompressOpts)

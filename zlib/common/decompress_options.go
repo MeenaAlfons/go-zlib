@@ -2,9 +2,10 @@ package common
 
 func DefaultDecompressOptions() DecompressOptions {
 	return &decompressOptions{
-		windowBits: 15,
-		header:     HeaderTypeZlib,
-		bufferSize: 1024,
+		windowBits:  15,
+		header:      HeaderTypeZlib,
+		bufferSize:  1024,
+		autoDestroy: true,
 	}
 }
 
@@ -13,11 +14,13 @@ type DecompressOptions interface {
 	Header() HeaderType
 	BufferSize() int
 	InitialDictionary() []byte
+	AutoDestroy() bool
 
 	WithWindowBits(windowBits int) DecompressOptions
 	WithHeader(header HeaderType) DecompressOptions
 	WithBufferSize(bufferSize int) DecompressOptions
 	WithInitialDictionary(initialDictionary []byte) DecompressOptions
+	WithAutoDestroy(autoDestroy bool) DecompressOptions
 }
 
 type decompressOptions struct {
@@ -25,7 +28,8 @@ type decompressOptions struct {
 	header            HeaderType
 	initialDictionary []byte
 
-	bufferSize int
+	bufferSize  int
+	autoDestroy bool
 }
 
 func (opts *decompressOptions) WindowBits() int {
@@ -42,6 +46,10 @@ func (opts *decompressOptions) BufferSize() int {
 
 func (opts *decompressOptions) InitialDictionary() []byte {
 	return opts.initialDictionary
+}
+
+func (opts *decompressOptions) AutoDestroy() bool {
+	return opts.autoDestroy
 }
 
 func (opts *decompressOptions) WithWindowBits(windowBits int) DecompressOptions {
@@ -61,5 +69,10 @@ func (opts *decompressOptions) WithBufferSize(bufferSize int) DecompressOptions 
 
 func (opts *decompressOptions) WithInitialDictionary(initialDictionary []byte) DecompressOptions {
 	opts.initialDictionary = initialDictionary
+	return opts
+}
+
+func (opts *decompressOptions) WithAutoDestroy(autoDestroy bool) DecompressOptions {
+	opts.autoDestroy = autoDestroy
 	return opts
 }

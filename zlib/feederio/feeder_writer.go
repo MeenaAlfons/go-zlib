@@ -9,7 +9,7 @@ import (
 	"github.com/MeenaAlfons/go-zlib/zlib/utils"
 )
 
-func NewFeederWriter(writer io.Writer, feeder compression.FeederConsumer, bufferSize int) common.WriteFlushCloser {
+func NewFeederWriter(writer io.Writer, feeder compression.FeederConsumer, bufferSize int) common.WriteFlushCloseResetter {
 	// When the stream arrives at the end of a buffer, its internal state would refer to a position past the end of the buffer.
 	// This results in error: "found pointer to free object".
 	// To avoid this case, we reserve one byte at the end of the buffer so that the final state will not point past the end of the buffer.
@@ -186,4 +186,9 @@ func (r *feederWriter) Close() error {
 	}
 
 	return nil
+}
+
+func (w *feederWriter) Reset(target io.Writer) error {
+	w.writer = target
+	return w.feeder.Reset()
 }

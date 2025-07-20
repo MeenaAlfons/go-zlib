@@ -37,6 +37,7 @@ func (c *feederConsumerSafeOutputBuffer) Consume(outputBuffer []byte) (int, erro
 		return c.feederConsumer.Consume(outputBuffer[:len(outputBuffer)-1])
 	}
 
+	// TODO optimization: we can use a buffer on the stack here to avoid allocation on heap.
 	newOutputBuffer := make([]byte, 2)
 	have, err := c.feederConsumer.Consume(newOutputBuffer[:len(newOutputBuffer)-1])
 	copy(outputBuffer, newOutputBuffer)
@@ -49,4 +50,12 @@ func (c *feederConsumerSafeOutputBuffer) CanCallConsume() bool {
 
 func (c *feederConsumerSafeOutputBuffer) IsDoneWithReason() (bool, error) {
 	return c.feederConsumer.IsDoneWithReason()
+}
+
+func (c *feederConsumerSafeOutputBuffer) Reset() error {
+	return c.feederConsumer.Reset()
+}
+
+func (c *feederConsumerSafeOutputBuffer) Destroy() error {
+	return c.feederConsumer.Destroy()
 }

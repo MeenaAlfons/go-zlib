@@ -10,7 +10,7 @@ import (
 
 // NewCompressWriter writes compressed data to target.
 // It returns a WriteFlushCloser which is used to write decompressed data to be compressed.
-func NewCompressWriter(target io.Writer, opts common.CompressOptions) (common.WriteFlushCloser, error) {
+func NewCompressWriter(target io.Writer, opts common.CompressOptions) (common.WriteFlushCloseResetter, error) {
 	zcompressor, err := compression.NewCompressor(opts)
 	if err != nil {
 		return nil, err
@@ -23,7 +23,7 @@ func NewCompressWriter(target io.Writer, opts common.CompressOptions) (common.Wr
 }
 
 type compressWriter struct {
-	impl common.WriteFlushCloser
+	impl common.WriteFlushCloseResetter
 }
 
 // Write writes decompressed data which will be compressed and written to target.
@@ -40,4 +40,8 @@ func (w *compressWriter) Flush() error {
 // Write and Flush methods can not be called after Close.
 func (w *compressWriter) Close() error {
 	return w.impl.Close()
+}
+
+func (w *compressWriter) Reset(target io.Writer) error {
+	return w.impl.Reset(target)
 }

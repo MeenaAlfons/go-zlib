@@ -12,6 +12,7 @@ import (
 // NewCompressor creates a new compressor FeederConsumer with the given options.
 func NewCompressor(opts common.CompressOptions) (FeederConsumer, error) {
 	c := &compressor{
+		opts:    opts,
 		zstream: capi.NewZStream(),
 	}
 
@@ -31,6 +32,7 @@ func NewCompressor(opts common.CompressOptions) (FeederConsumer, error) {
 }
 
 type compressor struct {
+	opts    common.CompressOptions
 	zstream capi.ZStream
 
 	lastFlush     Flush
@@ -142,9 +144,16 @@ func (c *compressor) processReturnValue(ret capi.ZConstant) error {
 				return c.endStream(reason)
 			}
 
-			err := c.endStream(nil)
-			if err != nil {
-				return err
+			// We could voluntarily call endStream here to release the resources.
+			// However, we don't do that because the caller may want to reuse the compressor.
+			// If the caller wants to reuse the compressor, it should call Reset.
+			// If the caller wants to release the resource, it could Destroy().
+			// We also support the AutoDestroy option which will automatically call Destroy when the compressor is no longer needed.
+			if c.opts.AutoDestroy() {
+				err := c.Destroy()
+				if err != nil {
+					return fmt.Errorf("zlib: failed to auto destroy compressor: %w", err)
+				}
 			}
 			return io.EOF
 		}
@@ -201,6 +210,56 @@ func zFlush(flush Flush) capi.ZConstant {
 
 func wrapWithDistructionNote(originalError error, destructionError error) error {
 	return fmt.Errorf("%w. The stream is no longer usable and was destructed. The result of stream destruction is: %s", originalError, destructionError)
+}
+
+func (c *compressor) Destroy() error {
+	if c.streamEndHasBeenCalled {
+		// If the stream has already ended, we don't need to call endStream again.
+		return nil
+	}
+
+	err := c.endStream(nil)
+	if err != nil {
+		return fmt.Errorf("zlib: failed to destroy compressor: %w", err)
+	}
+	return nil
+}
+
+func (c *compressor) Reset() error {
+	// If the stream was ended, reinitialize it, otherwise reset it.
+	switch c.streamEndHasBeenCalled {
+	case true:
+		// If the stream has ended, we need to reinitialize it.
+		ret := c.zstream.DeflateInit2(c.opts.Level(), zWindowBits(c.opts), c.opts.MemoryLevel(), int(c.opts.Strategy()))
+		if ret != capi.Z_OK {
+			return capi.ZError(ret)
+		}
+	case false:
+		ret := c.zstream.DeflateReset()
+		if ret != capi.Z_OK {
+			return fmt.Errorf("zlib: failed to reset compressor: %w", capi.ZError(ret))
+		}
+	}
+
+	c.lastFlush = NoFlush
+	c.hasMoreOutput = false
+	c.streamEndHasBeenCalled = false
+	c.streamEndError = nil
+	c.streamEndReason = nil
+
+	// Reset the initial dictionary if it was set
+	if c.opts.InitialDictionary() != nil {
+		ret := c.zstream.DeflateSetDictionary(c.opts.InitialDictionary())
+		if ret != capi.Z_OK {
+			return fmt.Errorf("zlib: failed to reset initial dictionary: %w", capi.ZError(ret))
+		}
+	}
+
+	return nil
+}
+
+func (c *compressor) ResetWithOptions(opt common.CompressOptions) error {
+	return fmt.Errorf("Reset with options is not YET supported for compressor: %v", c.opts)
 }
 
 // TODO

@@ -7,7 +7,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/MeenaAlfons/go-zlib/zlib"
 	"github.com/MeenaAlfons/go-zlib/zlib/common"
 )
 
@@ -51,7 +50,7 @@ const REPEAT_COUNT = 1
 func TestZlib(t *testing.T) {
 	tests := []struct {
 		name                  string
-		operation             func([]byte, common.CompressOptions, func(common.CompressOptions) common.DecompressOptions, testLogger) error
+		operation             func(ZLib, []byte, common.CompressOptions, func(common.CompressOptions) common.DecompressOptions, testLogger) error
 		decompressOptsFactory func(opts common.CompressOptions) common.DecompressOptions
 		expectedError         error
 	}{
@@ -72,6 +71,7 @@ func TestZlib(t *testing.T) {
 	samples := getDataSamples()
 	combinations := getCompressOptionsCombinations()
 	dictionaryFactories := getDictionaryFactories()
+	zlibs := getZlibs()
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -80,6 +80,7 @@ func TestZlib(t *testing.T) {
 				samples,
 				combinations,
 				dictionaryFactories,
+				zlibs,
 				REPEAT_COUNT,
 				AllCombinationsPredicate,
 				test.decompressOptsFactory,
@@ -98,16 +99,16 @@ func WithDictionary(operation func(*testing.T, sample, common.CompressOptions, f
 	}
 }
 
-func DecompressorWriterCompressReader(sampleData []byte, opts common.CompressOptions, decompressOptsFactory func(common.CompressOptions) common.DecompressOptions, log testLogger) error {
+func DecompressorWriterCompressReader(zlib ZLib, sampleData []byte, opts common.CompressOptions, decompressOptsFactory func(common.CompressOptions) common.DecompressOptions, log testLogger) error {
 	decompressOpts := decompressOptsFactory(opts)
 
-	compressed, err := synchronousCompressReader(log, sampleData, opts)
+	compressed, err := synchronousCompressReader(zlib, log, sampleData, opts)
 	if err != nil {
 		return err
 	}
 	log.Logf("Compressed data 1: %x", compressed)
 
-	compressed2, decompressed, err := asynchronousDecompressAndCompress(log, compressed, opts, decompressOpts)
+	compressed2, decompressed, err := asynchronousDecompressAndCompress(zlib, log, compressed, opts, decompressOpts)
 	if err != nil {
 		return err
 	}
@@ -117,7 +118,7 @@ func DecompressorWriterCompressReader(sampleData []byte, opts common.CompressOpt
 	// compressed and compressed2 could be different.
 	// So, we can't compare them.
 	// Instead, we'll decompress compressed2 to make sure it is correct.
-	decompressed2, err := synchronousDecompressWriter(log, compressed2, decompressOpts)
+	decompressed2, err := synchronousDecompressWriter(zlib, log, compressed2, decompressOpts)
 	if err != nil {
 		return err
 	}
@@ -134,17 +135,17 @@ func DecompressorWriterCompressReader(sampleData []byte, opts common.CompressOpt
 	return nil
 }
 
-func CompressorWriterDecompressReader(sampleData []byte, opts common.CompressOptions, decompressOptsFactory func(common.CompressOptions) common.DecompressOptions, log testLogger) error {
+func CompressorWriterDecompressReader(zlib ZLib, sampleData []byte, opts common.CompressOptions, decompressOptsFactory func(common.CompressOptions) common.DecompressOptions, log testLogger) error {
 	decompressOpts := decompressOptsFactory(opts)
 
-	compressed, decompressed, err := asynchronousCompressAndDecompress(log, sampleData, opts, decompressOpts)
+	compressed, decompressed, err := asynchronousCompressAndDecompress(zlib, log, sampleData, opts, decompressOpts)
 	if err != nil {
 		return err
 	}
 	log.Logf("Decompressed data 1: %x", decompressed)
 	log.Logf("Compressed data 1: %x", compressed)
 
-	compressed2, err := synchronousCompressWriter(log, decompressed, opts)
+	compressed2, err := synchronousCompressWriter(zlib, log, decompressed, opts)
 	if err != nil {
 		return err
 	}
@@ -154,7 +155,7 @@ func CompressorWriterDecompressReader(sampleData []byte, opts common.CompressOpt
 	// while we use finish only in the synchronous version.
 	// So, we can't compare them.
 	// Instead, we'll decompress compressed2 to make sure it is correct.
-	decompressed2, err := synchronousDecompressWriter(log, compressed2, decompressOpts)
+	decompressed2, err := synchronousDecompressWriter(zlib, log, compressed2, decompressOpts)
 	if err != nil {
 		return err
 	}
@@ -172,7 +173,7 @@ func CompressorWriterDecompressReader(sampleData []byte, opts common.CompressOpt
 }
 
 // Test CompressorReader synchronously when the full input is already available.
-func synchronousCompressReader(log testLogger, decompressed []byte, opts common.CompressOptions) ([]byte, error) {
+func synchronousCompressReader(zlib ZLib, log testLogger, decompressed []byte, opts common.CompressOptions) ([]byte, error) {
 	var buf bytes.Buffer
 	if _, err := buf.Write(decompressed); err != nil {
 		return nil, fmt.Errorf("Error writing to buffer: %w", err)
@@ -191,7 +192,7 @@ func synchronousCompressReader(log testLogger, decompressed []byte, opts common.
 }
 
 // Test CompressorWriter synchronously when the full input is already available.
-func synchronousCompressWriter(log testLogger, decompressed []byte, opts common.CompressOptions) ([]byte, error) {
+func synchronousCompressWriter(zlib ZLib, log testLogger, decompressed []byte, opts common.CompressOptions) ([]byte, error) {
 	var buf bytes.Buffer
 	compressorWriter, err := zlib.NewCompressWriter(&buf, opts)
 	if err != nil {
@@ -217,7 +218,7 @@ func synchronousCompressWriter(log testLogger, decompressed []byte, opts common.
 	return buf.Bytes(), nil
 }
 
-func synchronousDecompressWriter(log testLogger, compressed []byte, opts common.DecompressOptions) ([]byte, error) {
+func synchronousDecompressWriter(zlib ZLib, log testLogger, compressed []byte, opts common.DecompressOptions) ([]byte, error) {
 	var buf bytes.Buffer
 	decompressorWriter, err := zlib.NewDecompressWriter(&buf, opts)
 	if err != nil {
@@ -246,7 +247,7 @@ func synchronousDecompressWriter(log testLogger, compressed []byte, opts common.
 // Test the asynchronous behavior of DecompressorWriter and CompressorReader
 // by connecting them through a pipe.
 // A side buffer is used to store the decompressed data.
-func asynchronousDecompressAndCompress(log testLogger, compressed []byte, opts common.CompressOptions, decompressOpts common.DecompressOptions) (compressedResult []byte, decompressedResult []byte, err error) {
+func asynchronousDecompressAndCompress(zlib ZLib, log testLogger, compressed []byte, opts common.CompressOptions, decompressOpts common.DecompressOptions) (compressedResult []byte, decompressedResult []byte, err error) {
 	var decompressedBuffer bytes.Buffer
 	defer func() {
 		decompressedResult = decompressedBuffer.Bytes()
@@ -305,7 +306,7 @@ func asynchronousDecompressAndCompress(log testLogger, compressed []byte, opts c
 // Test the asynchronous behavior of CompressorWriter and DecompressorReader
 // by connecting them through a pipe.
 // A side buffer is used to store the decompressed data.
-func asynchronousCompressAndDecompress(log testLogger, decompressed []byte, opts common.CompressOptions, decompressOpts common.DecompressOptions) (compressedResult []byte, decompressedResult []byte, err error) {
+func asynchronousCompressAndDecompress(zlib ZLib, log testLogger, decompressed []byte, opts common.CompressOptions, decompressOpts common.DecompressOptions) (compressedResult []byte, decompressedResult []byte, err error) {
 	var compressedBuffer bytes.Buffer
 	defer func() {
 		compressedResult = compressedBuffer.Bytes()

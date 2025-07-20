@@ -28,6 +28,7 @@ func DefaultCompressOptions() CompressOptions {
 		memoryLevel: 2,
 		strategy:    StrategyDefault,
 		bufferSize:  1024,
+		autoDestroy: true,
 	}
 }
 
@@ -39,6 +40,7 @@ type CompressOptions interface {
 	Strategy() StrategyType
 	BufferSize() int
 	InitialDictionary() []byte
+	AutoDestroy() bool
 
 	WithLevel(level int) CompressOptions
 	WithWindowBits(windowBits int) CompressOptions
@@ -47,6 +49,7 @@ type CompressOptions interface {
 	WithStrategy(strategy StrategyType) CompressOptions
 	WithBufferSize(bufferSize int) CompressOptions
 	WithInitialDictionary(initialDictionary []byte) CompressOptions
+	WithAutoDestroy(autoDestroy bool) CompressOptions
 }
 
 type compressOptions struct {
@@ -57,7 +60,8 @@ type compressOptions struct {
 	strategy          StrategyType
 	initialDictionary []byte
 
-	bufferSize int
+	bufferSize  int
+	autoDestroy bool
 }
 
 func (opts *compressOptions) Level() int {
@@ -86,6 +90,10 @@ func (opts *compressOptions) BufferSize() int {
 
 func (opts *compressOptions) InitialDictionary() []byte {
 	return opts.initialDictionary
+}
+
+func (opts *compressOptions) AutoDestroy() bool {
+	return opts.autoDestroy
 }
 
 func (opts *compressOptions) WithLevel(level int) CompressOptions {
@@ -120,5 +128,10 @@ func (opts *compressOptions) WithBufferSize(bufferSize int) CompressOptions {
 
 func (opts *compressOptions) WithInitialDictionary(initialDictionary []byte) CompressOptions {
 	opts.initialDictionary = initialDictionary
+	return opts
+}
+
+func (opts *compressOptions) WithAutoDestroy(autoDestroy bool) CompressOptions {
+	opts.autoDestroy = autoDestroy
 	return opts
 }
